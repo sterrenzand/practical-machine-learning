@@ -1,0 +1,146 @@
+---
+title: "Practical Machine Learning"
+author: "C.Smeyers"
+date: "July 14, 2015"
+output: html_document
+---
+
+This Project looks into how well 6 subjects perform barbell raises using information collected by accelerometer sensors placed on belt, arm and forearm of the participants and one on the dumbell itself.
+The subjects are each perfoming the barbell raises in a correct manner and also in 5 incorrect ways. 
+For more information on how the experiment is set up please check http://groupware.les.inf.puc-rio.br/har.
+
+The Weight Lifting Exercise Dataset (training and quiz data set) has been downloaded from the following urls and saved into the working directory:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+## Loading the data
+
+```{r}
+library(caret) 
+trainData=read.csv("pml-training.csv",na.strings=c("#DIV/0!"," ", "", "NA"))
+quizData=read.csv("pml-testing.csv", na.strings=c("#DIV/0!"," ", "", "NA"))
+```
+
+##Exploration and Data Cleaning
+* determine dimensions of dataset
+* calculate percentage of missing values or invalid entries for each variable
+* remove features with more than 60% missing values
+* check for features with zero or near zero variance and remove if necessary
+* check for variables with high correlation and remove if necessary
+
+```{r}
+m=dim(trainData)[1] #the training data has 19622 rows 
+n=dim(trainData)[2] #of observations on 160 features
+countNA<-rep(0,n)
+# look at the percentage missing data in each feature
+for (i in 1:n){countNA[i]<-sum(is.na(trainData[,i]))/m*100}
+
+tidyTraining<-trainData[,countNA<60] # choose only the features with less then 60% invalid entries -> down to 60 variables
+tidyTraining<-tidyTraining[, -c(1:6)]
+dim(tidyTraining) #we are down to 54 variables
+zero<-nearZeroVar(tidyTraining[sapply(tidyTraining, is.numeric)],saveMetrics=TRUE) #no variables with zero or near zero variance were found
+
+correlationmatrix <- cor(tidyTraining[sapply(tidyTraining, is.numeric)])
+columsToRemove <- findCorrelation(correlationmatrix, cutoff = .8, verbose = TRUE)
+tidyTraining<-tidyTraining[,-columsToRemove]# we are now down to 42 variables
+```
+The data set (trainData) has 19622 rows of observations on 160 features. The way the exercise is performed is coded in the "classe" variable which takes on values out of A, B, C, D, E, depending on how the exercise was carried out.
+Many of the variables contain a significant amount of missing values (>97%). They are not useful and can be ommitted.
+The features X, user_name, as well as those relating to timestamps and windows are also removed from the data set, as they are not useful for prediction of class.
+
+When looking at the percentage of values that are NA for each of the features, one finds that many contain no NAs at all, while others contain a significant amount of (>97%) missing values. Variables with this many missing values are not useful for predictions. The decision is made to omit variables with more than 60% NAs from the training set. This reduces our training set down from the original 160 variables to 93.
+No zero or near zero variance variables were found. A correlation matrix was drawn up and columns removed that had high correlations with other columns. The treshold for a high correlation was set to 0.8. We are then down to 42 variables for the training set.
+
+
+
+##Modeling
+###Pre-Modeling
+* set seed to insure reproducibility of results
+* provided quiz set not to be used to evaluate predictive model
+* divide tidy data set (tidyTraining) into  into 60% train set and 40% test set
+
+
+```{r}
+set.seed(1234)
+splitTrain <- createDataPartition(tidyTraining$classe, p = 0.60, list = FALSE)
+train <- tidyTraining[splitTrain,]
+test<-tidyTraining[-splitTrain,]
+##We split the training data into 60% partition for creating our model and 40% for estimating the out of sample performance of our model. We then train a model on the 60% partition. The model type is a random forest.
+```
+###Model building
+
+* we use Caret package in R
+* train a random forest model with variable "classe" as outcome
+* we use **repeated 10 fold cross validation** (CV)
+
+
+For more information on how K-fold CV works please refer to [1],[2] and [3].
+
+```{r}
+ctrl <- trainControl(method = "repeatedcv",
+                           number = 10,
+                           repeats = 10 )
+
+#To  determine  the  resampling  method the "trainControl" function  is  used.   The  option "method" controls the type of resampling.; here repeated K-fold cross-validation. The argument "repeats" controls the number of resampling repetitions. K is controlled by the "number" argument (default=10).
+
+modelFit <- train(classe ~ .,method="rf",data=train, trControl=ctrl)
+```
+The alogrithm fits several random forest models and decides which is performing best by comparing the accuracies.   
+
+This is the summary for the best model:
+
+```{r}
+modelFit$finalModel 
+
+```
+Accuracy on the training set is 0.9948.
+
+###Prediction
+* Predict values for the classe variable by applying the best random forest model to the test data set
+
+* estimate out of sample performance of model by applying it to the test set
+
+```{r}
+prediction <- predict(modelFit,test)
+confusionMatrix(test$classe,prediction)
+##The misclassification error percentage is estimated on the out of sample set ( 1-accuracy from the confusionMatrix calculation above)
+
+err<-as.numeric(1-confusionMatrix(test$classe,prediction)$overall[1])
+```
+Accuracy on test set 0.9976 and the estimated out of sample error 0.0024 (0.24%)
+
+### Quiz results
+* Apply the best model to the quiz set
+
+```{r, echo=FALSE}
+predictionquiz<-predict(modelFit,testData)
+answers = predictionquiz
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(answers)
+```
+Quiz results:
+
+```{r}
+predictionquiz
+```
+The developed machine learning algorithm predicts all 20 of the quiz results correctly and can is thus able to predict the manner in which the barbell lift exercise is carried out by the participants.
+
+##References
+
+ [1] A Short Introduction to the caret Package Max Kuhn
+ https://cran.r-project.org/web/packages/caret/vignettes/caret.pdf
+ 
+ [2] Predictive Modeling with R and the caret Package by Max Kuhn http://www.edii.uclm.es/~useR-2013/Tutorials/kuhn/user_caret_2up.pdf
+ 
+ [3] Lectures and materials of the Coursera course "Practical Machine Learning"
+by Jeff Leek, PhD, Roger D. Peng, PhD, Brian Caffo, PhD
