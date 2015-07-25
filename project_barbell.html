@@ -8,7 +8,7 @@
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="generator" content="pandoc" />
 
-<meta name="author" content="C.Smeyers" />
+<meta name="author" content="Claudia.Smeyers" />
 
 <meta name="date" content="2015-07-14" />
 
@@ -63,19 +63,21 @@ img {
 
 <div id="header">
 <h1 class="title">Practical Machine Learning</h1>
-<h4 class="author"><em>C.Smeyers</em></h4>
+<h4 class="author"><em>Claudia.Smeyers</em></h4>
 <h4 class="date"><em>July 14, 2015</em></h4>
 </div>
 
 
-<p>This Project looks into how well 6 subjects perform barbell raises using information collected by accelerometer sensors placed on belt, arm and forearm of the participants and one on the dumbell itself. The subjects are each perfoming the barbell raises in a correct manner and also in 5 incorrect ways. For more information on how the experiment is set up please check <a href="http://groupware.les.inf.puc-rio.br/har" class="uri">http://groupware.les.inf.puc-rio.br/har</a>.</p>
+<p>This Project looks into how well 6 subjects perform barbell raises using information collected by accelerometer sensors placed on belt, arm and forearm of the participants and on the barbell itself. The subjects are each perfoming the barbell raises in a correct manner and also in several incorrect ways. For more information on how the experiment is set up please refer to <a href="http://groupware.les.inf.puc-rio.br/har" class="uri">http://groupware.les.inf.puc-rio.br/har</a>.</p>
 <p>The Weight Lifting Exercise Dataset (training and quiz data set) has been downloaded from the following urls and saved into the working directory:</p>
 <p><a href="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv" class="uri">https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv</a></p>
 <p><a href="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv" class="uri">https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv</a></p>
 <div id="loading-the-data" class="section level2">
 <h2>Loading the data</h2>
-<pre class="#{r}"><code>library(caret) 
-trainData=read.csv(&quot;pml-training.csv&quot;,na.strings=c(&quot;#DIV/0!&quot;,&quot; &quot;, &quot;&quot;, &quot;NA&quot;))
+<pre class="r"><code>library(caret) </code></pre>
+<pre><code>## Loading required package: lattice
+## Loading required package: ggplot2</code></pre>
+<pre class="r"><code>trainData=read.csv(&quot;pml-training.csv&quot;,na.strings=c(&quot;#DIV/0!&quot;,&quot; &quot;, &quot;&quot;, &quot;NA&quot;))
 quizData=read.csv(&quot;pml-testing.csv&quot;, na.strings=c(&quot;#DIV/0!&quot;,&quot; &quot;, &quot;&quot;, &quot;NA&quot;))</code></pre>
 </div>
 <div id="exploration-and-data-cleaning" class="section level2">
@@ -86,23 +88,28 @@ quizData=read.csv(&quot;pml-testing.csv&quot;, na.strings=c(&quot;#DIV/0!&quot;,
 <li>remove features with more than 60% missing values</li>
 <li>check for features with zero or near zero variance and remove if necessary</li>
 <li>check for variables with high correlation and remove if necessary</li>
+<li>remove non-relevant data columns</li>
 </ul>
-<pre class="#{r}"><code>m=dim(trainData)[1] #the training data has 19622 rows 
+<pre class="r"><code>m=dim(trainData)[1] #the training data has 19622 rows 
 n=dim(trainData)[2] #of observations on 160 features
 countNA&lt;-rep(0,n)
 # look at the percentage missing data in each feature
 for (i in 1:n){countNA[i]&lt;-sum(is.na(trainData[,i]))/m*100}
 
-tidyTraining&lt;-trainData[,countNA&lt;60] # choose only the features with less then 60% invalid entries -&gt; down to 60 variables
-tidyTraining&lt;-tidyTraining[, -c(1:6)]
-dim(tidyTraining) #we are down to 54 variables
-zero&lt;-nearZeroVar(tidyTraining[sapply(tidyTraining, is.numeric)],saveMetrics=TRUE) #no variables with zero or near zero variance were found
+tidy&lt;-trainData[,countNA&lt;60] # choose only the features with less then 60% invalid entries -&gt; down to 60 variables
+tidy&lt;-tidy[, -c(1:6)] #omit X, user_name, time stamp and windows variables
+dim(tidy) #we are down to 54 variables</code></pre>
+<pre><code>## [1] 19622    54</code></pre>
+<pre class="r"><code>zero&lt;-nearZeroVar(tidy[sapply(tidy, is.numeric)],saveMetrics=TRUE) #no variables with zero or near zero variance were found
 
-correlationmatrix &lt;- cor(tidyTraining[sapply(tidyTraining, is.numeric)])
-columsToRemove &lt;- findCorrelation(correlationmatrix, cutoff = .8, verbose = TRUE)
-tidyTraining&lt;-tidyTraining[,-columsToRemove]# we are now down to 42 variables</code></pre>
-<p>The data set (trainData) has 19622 rows of observations on 160 features. Many of the variables contain a significant amount of missing values (&gt;97%). They are not useful and can be ommitted. The features X, user_name, as well as those relating to timestamps and windows are also removed from the data set, as they are not useful for prediction of class.</p>
-<p>When looking at the percentage of values that are NA for each of the features, one finds that many contain no NAs at all, while others contain a significant amount of (&gt;97%) missing values. Variables with this many missing values are not useful for predictions. The decision is made to omit variables with more than 60% NAs from the training set. This reduces our training set down from the original 160 variables to 93. No zero or near zero variance variables were found. A correlation matrix was drawn up and columns removed that had high correlations with other columns. The treshold for a high correlation was set to 0.8. We are then down to 42 variables for the training set.</p>
+correlationmatrix &lt;- cor(tidy[sapply(tidy, is.numeric)])
+columsToRemove &lt;- findCorrelation(correlationmatrix, cutoff = .8, verbose = FALSE)
+tidy&lt;-tidy[,-columsToRemove]# we are now down to 42 variables</code></pre>
+<p>The data set (trainData) has 19622 rows of observations on 160 features. The way the barbell exercise is performed is coded in the “classe” variable which takes on values out of A, B, C, D, E, depending on how the exercise was carried out.</p>
+<p>When looking at the percentage of values that are NA for each of the features, one finds that many contain no NAs at all, while others contain a significant amount of (&gt;97%) missing values. Variables with this many missing values are not useful for predictions. The decision is made to omit variables with more than 60% NAs from the training set. This reduces our training set down from the original 160 variables to 60.</p>
+<p>The features X, user_name, as well as those relating to timestamps and windows are also removed from the data set, as they are not relevant for prediction of classe.</p>
+<p>No zero or near zero variance variables were found.</p>
+<p>A correlation matrix was drawn up and columns removed that had high correlations with other columns. The treshold for a high correlation was set to 0.8. We end up with a tidy data set comprising 19622 rows of 42 variables. There are 41 predictors and the “classe” variable as outcome.</p>
 </div>
 <div id="modeling" class="section level2">
 <h2>Modeling</h2>
@@ -111,55 +118,125 @@ tidyTraining&lt;-tidyTraining[,-columsToRemove]# we are now down to 42 variables
 <ul>
 <li>set seed to insure reproducibility of results</li>
 <li>provided quiz set not to be used to evaluate predictive model</li>
-<li>divide tidy data set (tidyTraining) into into 60% train set and 40% test set</li>
+<li>divide tidy data set (tidy) into into 60% train set and 40% test set</li>
 </ul>
-<pre class="#{r}"><code>set.seed(1234)
-splitTrain &lt;- createDataPartition(tidyTraining$classe, p = 0.60, list = FALSE)
-train &lt;- tidyTraining[splitTrain,]
-test&lt;-tidyTraining[-splitTrain,]
+<pre class="r"><code>set.seed(1234)
+splitTrain &lt;- createDataPartition(tidy$classe, p = 0.60, list = FALSE)
+train &lt;- tidy[splitTrain,]
+test&lt;-tidy[-splitTrain,]
 ##We split the training data into 60% partition for creating our model and 40% for estimating the out of sample performance of our model. We then train a model on the 60% partition. The model type is a random forest.</code></pre>
 </div>
 <div id="model-building" class="section level3">
 <h3>Model building</h3>
 <ul>
-<li>we use Caret package in R</li>
-<li>train a random forest model with variable “classe” as outcome</li>
-<li>we use <strong>repeated 10 fold cross validation</strong> (CV)</li>
+<li>we use the Caret package in R</li>
+<li>train a random forest model using <strong>10-fold cross validation</strong> (CV)</li>
 </ul>
 <p>For more information on how K-fold CV works please refer to [1],[2] and [3].</p>
-<pre class="#{r}"><code>ctrl &lt;- trainControl(method = &quot;repeatedcv&quot;,
-                           number = 10,
-                           repeats = 10 )
+<pre class="r"><code>ctrl &lt;- trainControl(method = &quot;cv&quot;, number = 10 )
 
-#To  determine  the  resampling  method the &quot;trainControl&quot; function  is  used.   The  option &quot;method&quot; controls the type of resampling.; here repeated K-fold cross-validation. The argument &quot;repeats&quot; controls the number of resampling repetitions. K is controlled by the &quot;number&quot; argument (default=10).
+#To  determine  the  resampling  method the &quot;trainControl&quot; function  is  used.   The  option &quot;method&quot; controls the type of resampling.; here K-fold cross-validation. The argument. K is controlled by the &quot;number&quot; argument (default=10).
 
-modelFit &lt;- train(classe ~ .,method=&quot;rf&quot;,data=train, trControl=ctrl)</code></pre>
-<p>The alogrithm fits several random forest models and decides which is performing best by comparing the accuracies.</p>
+modelFit &lt;- train(classe ~ .,method=&quot;rf&quot;,data=train, trControl=ctrl, verbose=FALSE)</code></pre>
+<pre><code>## Loading required package: randomForest
+## randomForest 4.6-10
+## Type rfNews() to see new features/changes/bug fixes.</code></pre>
+<pre class="r"><code>modelFit</code></pre>
+<pre><code>## Random Forest 
+## 
+## 11776 samples
+##    41 predictor
+##     5 classes: 'A', 'B', 'C', 'D', 'E' 
+## 
+## No pre-processing
+## Resampling: Cross-Validated (10 fold) 
+## 
+## Summary of sample sizes: 10599, 10599, 10597, 10598, 10599, 10599, ... 
+## 
+## Resampling results across tuning parameters:
+## 
+##   mtry  Accuracy   Kappa      Accuracy SD   Kappa SD   
+##    2    0.9925270  0.9905464  0.0027683711  0.003502378
+##   21    0.9969430  0.9961330  0.0009122562  0.001154203
+##   41    0.9942256  0.9926958  0.0024608176  0.003113225
+## 
+## Accuracy was used to select the optimal model using  the largest value.
+## The final value used for the model was mtry = 21.</code></pre>
+<p>The alogrithm fits several random forest models and decides which is performing best on the training set by comparing the accuracies.</p>
 <p>This is the summary for the best model:</p>
-<pre class="#{r}"><code>modelFit$finalModel 
-</code></pre>
-<p>Accuracy on the training set is 0.9948.</p>
+<pre class="r"><code>modelFit$finalModel </code></pre>
+<pre><code>## 
+## Call:
+##  randomForest(x = x, y = y, mtry = param$mtry, verbose = FALSE) 
+##                Type of random forest: classification
+##                      Number of trees: 500
+## No. of variables tried at each split: 21
+## 
+##         OOB estimate of  error rate: 0.35%
+## Confusion matrix:
+##      A    B    C    D    E  class.error
+## A 3346    0    0    0    2 0.0005973716
+## B    9 2267    3    0    0 0.0052654673
+## C    0   11 2042    1    0 0.0058422590
+## D    0    0    7 1921    2 0.0046632124
+## E    0    0    0    6 2159 0.0027713626</code></pre>
+<p>Accuracy on the training set is 0.9969.</p>
 </div>
 <div id="prediction" class="section level3">
 <h3>Prediction</h3>
 <ul>
 <li><p>Predict values for the classe variable by applying the best random forest model to the test data set</p></li>
-<li><p>estimate out of sample performance of model by applying it to the test set</p></li>
+<li><p>Estimate out of sample performance of model by applying it to the test set</p></li>
 </ul>
-<pre class="#{r}"><code>prediction &lt;- predict(modelFit,test)
-confusionMatrix(test$classe,prediction)
-##The misclassification error percentage is estimated on the out of sample set ( 1-accuracy from the confusionMatrix calculation above)
+<pre class="r"><code>prediction &lt;- predict(modelFit,test)
+confusionMatrix(test$classe,prediction)</code></pre>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 2232    0    0    0    0
+##          B    4 1513    1    0    0
+##          C    0    3 1364    1    0
+##          D    0    0    7 1279    0
+##          E    0    0    0    4 1438
+## 
+## Overall Statistics
+##                                           
+##                Accuracy : 0.9975          
+##                  95% CI : (0.9961, 0.9984)
+##     No Information Rate : 0.285           
+##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
+##                                           
+##                   Kappa : 0.9968          
+##  Mcnemar's Test P-Value : NA              
+## 
+## Statistics by Class:
+## 
+##                      Class: A Class: B Class: C Class: D Class: E
+## Sensitivity            0.9982   0.9980   0.9942   0.9961   1.0000
+## Specificity            1.0000   0.9992   0.9994   0.9989   0.9994
+## Pos Pred Value         1.0000   0.9967   0.9971   0.9946   0.9972
+## Neg Pred Value         0.9993   0.9995   0.9988   0.9992   1.0000
+## Prevalence             0.2850   0.1932   0.1749   0.1637   0.1833
+## Detection Rate         0.2845   0.1928   0.1738   0.1630   0.1833
+## Detection Prevalence   0.2845   0.1935   0.1744   0.1639   0.1838
+## Balanced Accuracy      0.9991   0.9986   0.9968   0.9975   0.9997</code></pre>
+<pre class="r"><code>##The misclassification error percentage is estimated on the test set ( 1-accuracy) 
 
 err&lt;-as.numeric(1-confusionMatrix(test$classe,prediction)$overall[1])</code></pre>
-<p>Accuracy on test set 0.9976 and the estimated out of sample error 0.0024 (0.24%)</p>
+<p>Accuracy on test set is 0.9975 and the <strong>estimated out of sample error 0.0025 (0.25%)</strong> Out of sample error = 1 - Accuracy = 1-0.9975 = 0.0025.</p>
 </div>
 <div id="quiz-results" class="section level3">
 <h3>Quiz results</h3>
 <ul>
 <li>Apply the best model to the quiz set</li>
 </ul>
-<p>```#{r, echo=FALSE} predictionquiz&lt;-predict(modelFit,testData) answers = predictionquiz pml_write_files = function(x){ n = length(x) for(i in 1:n){ filename = paste0(“problem_id_”,i,“.txt”) write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE) } }</p>
-<p>pml_write_files(answers) <code>Quiz results:</code>#{r} predictionquiz ``` The developed machine learning algorithm predicts all 20 of the quiz results correctly.</p>
+<pre class="r"><code>predictionquiz&lt;-predict(modelFit,quizData)</code></pre>
+<p>Quiz results:</p>
+<pre class="r"><code>predictionquiz</code></pre>
+<pre><code>##  [1] B A B A A E D B A A B C B A E E A B B B
+## Levels: A B C D E</code></pre>
+<p>The developed machine learning algorithm predicts all 20 of the quiz results correctly and can is thus able to predict the manner in which the barbell lift exercise is carried out by the participants.</p>
 </div>
 </div>
 <div id="references" class="section level2">
