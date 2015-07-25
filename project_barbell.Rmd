@@ -1,0 +1,152 @@
+---
+title: "Practical Machine Learning"
+author: "Claudia.Smeyers"
+date: "July 14, 2015"
+output: html_document
+---
+
+This Project looks into how well 6 subjects perform barbell raises using information collected by accelerometer sensors placed on belt, arm and forearm of the participants and on the barbell itself.
+The subjects are each perfoming the barbell raises in a correct manner and also in several incorrect ways. 
+For more information on how the experiment is set up please refer to http://groupware.les.inf.puc-rio.br/har.
+
+The Weight Lifting Exercise Dataset (training and quiz data set) has been downloaded from the following urls and saved into the working directory:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+## Loading the data
+
+```{r}
+library(caret) 
+trainData=read.csv("pml-training.csv",na.strings=c("#DIV/0!"," ", "", "NA"))
+quizData=read.csv("pml-testing.csv", na.strings=c("#DIV/0!"," ", "", "NA"))
+```
+
+##Exploration and Data Cleaning
+* determine dimensions of dataset
+* calculate percentage of missing values or invalid entries for each variable
+* remove features with more than 60% missing values
+* check for features with zero or near zero variance and remove if necessary
+* check for variables with high correlation and remove if necessary
+* remove non-relevant data columns
+
+```{r}
+m=dim(trainData)[1] #the training data has 19622 rows 
+n=dim(trainData)[2] #of observations on 160 features
+countNA<-rep(0,n)
+# look at the percentage missing data in each feature
+for (i in 1:n){countNA[i]<-sum(is.na(trainData[,i]))/m*100}
+
+tidy<-trainData[,countNA<60] # choose only the features with less then 60% invalid entries -> down to 60 variables
+tidy<-tidy[, -c(1:6)] #omit X, user_name, time stamp and windows variables
+dim(tidy) #we are down to 54 variables
+zero<-nearZeroVar(tidy[sapply(tidy, is.numeric)],saveMetrics=TRUE) #no variables with zero or near zero variance were found
+
+correlationmatrix <- cor(tidy[sapply(tidy, is.numeric)])
+columsToRemove <- findCorrelation(correlationmatrix, cutoff = .8, verbose = FALSE)
+tidy<-tidy[,-columsToRemove]# we are now down to 42 variables
+```
+The data set (trainData) has 19622 rows of observations on 160 features. The way the barbell exercise is performed is coded in the "classe" variable which takes on values out of A, B, C, D, E, depending on how the exercise was carried out.
+
+When looking at the percentage of values that are NA for each of the features, one finds that many contain no NAs at all, while others contain a significant amount of (>97%) missing values. Variables with this many missing values are not useful for predictions. The decision is made to omit variables with more than 60% NAs from the training set. This reduces our training set down from the original 160 variables to 60.
+
+The features X, user_name, as well as those relating to timestamps and windows are also removed from the data set, as they are not relevant for prediction of classe.
+
+No zero or near zero variance variables were found. 
+
+A correlation matrix was drawn up and columns removed that had high correlations with other columns. The treshold for a high correlation was set to 0.8. We end up with a tidy data set comprising  19622 rows of 42 variables. There are 41 predictors and the "classe" variable as outcome.
+
+
+
+##Modeling
+###Pre-Modeling
+* set seed to insure reproducibility of results
+* provided quiz set not to be used to evaluate predictive model
+* divide tidy data set (tidy) into  into 60% train set and 40% test set
+
+
+```{r}
+set.seed(1234)
+splitTrain <- createDataPartition(tidy$classe, p = 0.60, list = FALSE)
+train <- tidy[splitTrain,]
+test<-tidy[-splitTrain,]
+##We split the training data into 60% partition for creating our model and 40% for estimating the out of sample performance of our model. We then train a model on the 60% partition. The model type is a random forest.
+```
+###Model building
+
+* we use the Caret package in R
+* train a random forest model using **10-fold cross validation** (CV)
+
+
+For more information on how K-fold CV works please refer to [1],[2] and [3].
+
+```{r}
+ctrl <- trainControl(method = "cv", number = 10 )
+
+#To  determine  the  resampling  method the "trainControl" function  is  used.   The  option "method" controls the type of resampling.; here K-fold cross-validation. The argument. K is controlled by the "number" argument (default=10).
+
+modelFit <- train(classe ~ .,method="rf",data=train, trControl=ctrl, verbose=FALSE)
+modelFit
+```
+The alogrithm fits several random forest models and decides which is performing best on the training set by comparing the accuracies.   
+
+This is the summary for the best model:
+
+```{r}
+modelFit$finalModel 
+
+```
+Accuracy on the training set is 0.9969.
+
+###Prediction
+* Predict values for the classe variable by applying the best random forest model to the test data set
+
+* Estimate out of sample performance of model by applying it to the test set
+
+```{r}
+prediction <- predict(modelFit,test)
+confusionMatrix(test$classe,prediction)
+##The misclassification error percentage is estimated on the test set ( 1-accuracy) 
+
+err<-as.numeric(1-confusionMatrix(test$classe,prediction)$overall[1])
+```
+Accuracy on test set is 0.9975 and the **estimated out of sample error 0.0025 (0.25%)**
+Out of sample error = 1 - Accuracy = 1-0.9975 = 0.0025.
+
+### Quiz results
+* Apply the best model to the quiz set
+
+```{r}
+predictionquiz<-predict(modelFit,quizData)
+```
+
+```{r, echo=FALSE}
+answers = predictionquiz
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(answers)
+```
+Quiz results:
+
+```{r}
+predictionquiz
+```
+The developed machine learning algorithm predicts all 20 of the quiz results correctly and can is thus able to predict the manner in which the barbell lift exercise is carried out by the participants.
+
+##References
+
+ [1] A Short Introduction to the caret Package Max Kuhn
+ https://cran.r-project.org/web/packages/caret/vignettes/caret.pdf
+ 
+ [2] Predictive Modeling with R and the caret Package by Max Kuhn http://www.edii.uclm.es/~useR-2013/Tutorials/kuhn/user_caret_2up.pdf
+ 
+ [3] Lectures and materials of the Coursera course "Practical Machine Learning"
+by Jeff Leek, PhD, Roger D. Peng, PhD, Brian Caffo, PhD
